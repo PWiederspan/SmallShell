@@ -7,7 +7,7 @@
 #include <dirent.h>
 
 // Start by creating a new shell process in the terminal window which returns a : to let the
-// user know to start typing commands.
+// user know to start typing commands
 
 void list_contents(){
     // Open the current directory
