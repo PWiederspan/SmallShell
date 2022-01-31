@@ -27,7 +27,6 @@ void list_contents(){
     printf("\n");
 }
 
-
 int main(){
     char command[256];
     while (strcmp(command, "exit") != 0){
