@@ -23,19 +23,38 @@ void list_contents(){
         printf("%s      ", aDir->d_name);
     }
     // Close the directory
-    int closedir(currDir);
+    closedir(currDir);
     printf("\n");
 }
 
-int main(){
-    char command[256];
-    while (strcmp(command, "exit") != 0){
-        printf(": ");
-        scanf("%s", command);
+void go_to_home(){
+    chdir(getenv("HOME"));
+}
 
-        if (strcmp(command, "ls") == 0){
+int main(){
+    char input[2048];
+    char command[256];
+
+    while (strcmp(input, "exit\n") != 0){
+        printf(": ");
+        fgets(input, 2048, stdin);
+        int i = 0;
+        char *token = strtok(input, " ");
+        char *input_array[6];
+        ///printf("2");
+        while (token != NULL){
+            input_array[i++] = token;
+            token = strtok(NULL, " ");
+        }
+        strcpy(command, input_array[0]);
+        
+        if (strcmp(command, "ls\n") == 0){
             list_contents();
         }
+        if (strcmp(command, "cd\n") == 0){
+            go_to_home();
+        }
+        
     }
     return 0;
 
