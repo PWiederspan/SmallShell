@@ -34,7 +34,6 @@ void cleanList(struct Node* head)
         int status;
         pid_t pid;
         pid = waitpid(-1, &status, WNOHANG);
-        //printf("Exited with status: %ld\n",  WEXITSTATUS(status));
     }
 }
 
@@ -80,11 +79,12 @@ void remove_node(struct Node** n, int delete){
     prev->next = temp->next;
  
     free(temp); // Free memory
-    printf("Removed %ld\n", delete);
+    
 }
 
 void off(int);
 
+// Handle SIGINT to let the user know a process was terminated
 void inter_sig(int sig){
     int status;
     pid_t pid;
@@ -95,6 +95,7 @@ void inter_sig(int sig){
     signal(SIGINT, SIG_DFL);
 }
 
+// Turn on Foreground mode when SIGTSTP is received in Parent process
 void on(int sig){
     sig_flag = 1;
     char message[]  = "\nNow Entering Foreground Only Mode (& is now ignored)\n";
@@ -102,8 +103,9 @@ void on(int sig){
     signal(SIGTSTP, &off);
 }
 
+// Turn off Foreground mode when SIGTSTP is received in Parent process
 void off(int sig){
-  sig_flag = 0;
+    sig_flag = 0;
     char message[] = "\nNow Exiting Foreground Only Mode (& is no longer ignored)\n";
     write(STDERR_FILENO, message, sizeof message - 1);
     signal(SIGTSTP, &on);
@@ -122,10 +124,12 @@ void list_contents(){
         // Get meta-data for the current entry
         stat(aDir->d_name, &dirStat);
         printf("%s      ", aDir->d_name);
+        fflush(stdout);
     }
     // Close the directory
     closedir(currDir);
     printf("\n");
+    fflush(stdout);
 }
 
 // Changes directory base on the given relative or absolute path
@@ -226,11 +230,14 @@ int main(){
     while (strcmp(input, "exit\n") != 0){
         if (rm_flag!=0){
             waitpid(rm_flag,&status,WNOHANG);
-            printf("Exited with status %ld\n", WEXITSTATUS(status));
+            printf("Exited with status %d\n", WEXITSTATUS(status));
+            fflush(stdout);
+            rm_flag = 0;
         }
         cleanList(head);
         // Each line in the shell starts with : so that the user knows to enter a command
         printf(": ");
+        fflush(stdout);
         fgets(input, 2048, stdin);
         strcpy(pass_input, input);
         
@@ -259,21 +266,22 @@ int main(){
         if (strcmp(command, "\n") == 0){
             continue;
         }
+        // Get the Pid for the last foreground process and return the exit status of that process
         if (strcmp(command, "status\n") == 0){
-
-            printf("Last Process: %ld\n");
             waitpid(last_process,&status, WNOHANG);
             if (WIFEXITED(status))
             {
                 waitpid(last_process, &status, WNOHANG);
                 printf("Exited with status %d\n", WEXITSTATUS(status));
-                //printf("removing node %i\n", spawnPid);
+                fflush(stdout);
             } else if (WIFSIGNALED(status))
             {
                 int signum = WTERMSIG(status);
                 printf("%d exited due to signal %d\n", signum);
+                fflush(stdout);
             } else {
                 printf("Something else happened.\n");
+                fflush(stdout);
             }
             continue;
         }
@@ -296,6 +304,7 @@ int main(){
             continue;
         }
         if (strcmp(command, "cd") == 0){
+             // if an argument is given with "cd" command, change directory to the specified directory
             input_array[1][strcspn(input_array[1], "\n")] = 0;
             change_directory(input_array[1]);
             continue;
@@ -306,6 +315,8 @@ int main(){
             i = 0;
             count = 0;
             char temp[2048];
+
+            // Break the user input into tokens to check for <, >, or &
             char *saveptr;
             char *token2 = strtok_r(pass_input, " \t\r\n", &saveptr);
             char *pass_array[200] = {NULL};
@@ -344,8 +355,6 @@ int main(){
             pid_t spawnPid = fork();
 
 
-            
-            
             switch(spawnPid){
             case -1:
                 printf("Someting Messed up!\n");
@@ -353,28 +362,35 @@ int main(){
                 exit(1);
                 break;
             case 0:
+            // Child Process
+
                 signal(SIGTSTP, SIG_IGN);
+                signal(SIGINT, inter_sig);
                 if (write_flag > 0){
                     // If write flag is not 0, open/create the necessary file and write
                     // output to file
                     char filename[2048];
                     strcpy(filename, pass_array[write_flag]);
+                    
+                    // Remove output file from array
                     pass_array[write_flag] = NULL;
-                    printf("%s\n", filename);
+
+                    // Open file for write only then pass command to execvp
                     int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
                     dup2(fd,STDOUT_FILENO);
-                    signal(SIGINT, inter_sig);
                     int status_code = execvp(pass_array[0], pass_array);
                     dup2(fd,STDOUT_FILENO);
+
+                    // Close out file
                     close(fd);
                     perror("execve");
                     exit(1);
 
                 }else{
-                    signal(SIGINT, inter_sig);
                     if (interupt_flag != 0){
                         interupt_flag = 0;
                         printf("interupted child process\n");
+                        fflush(stdout);
                     }
                     int status_code = execvp(pass_array[0], pass_array);
                     perror("execve");
@@ -382,13 +398,16 @@ int main(){
                 }
 
             default:
-                // In the parent process
-                // Wait for child's termination if background flag is not 0
+                // Parent process
+                // Wait for child's termination if background flag is 0
                 if (bg_flag == 0){
                     last_process = spawnPid;
                     spawnPid = waitpid(spawnPid, &childStatus, 0);
                 } else{
-                    printf("Background pid is %ld\n", spawnPid);
+                    printf("Background pid is %d\n", spawnPid);
+                    bg_flag = 0;
+                    fflush(stdout);
+                    // Add process id to linked list for cleanup
                     add_node(head, spawnPid);
                 }
             }
